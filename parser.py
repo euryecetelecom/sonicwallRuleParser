@@ -1,17 +1,27 @@
+# BASED ON: https://github.com/pryorda/sonicwallRuleParser/blob/master/parser.py
+
 #!/usr/bin/python
 
 import re
 import sys
-import urllib
+import urllib.parse as urllib
 import collections
 import base64
 
-with open(sys.argv[1], 'r') as f:
-    read_data = f.readline()
-f.close()
+decoded_data = []
 
-decoded_data = base64.b64decode(read_data)
-decoded_data =  decoded_data.split("&")
+# WHEN USED WITH B64ENCODED DATA:
+# with open(sys.argv[1], 'r') as f:
+#     read_data = f.readline()
+#     decoded_data = base64.b64decode(read_data)
+#     decoded_data =  decoded_data.split("&")
+
+# WHEN USED WITH TXT DATA:
+with open(sys.argv[1], 'r') as f:
+    for line in f:
+      decoded_data.append(line)
+
+output_file_name = sys.argv[1]
 
 rules=[]
 ruleID=""
@@ -162,68 +172,70 @@ for line in decoded_data:
             ifaceVlanParent = ""
 
     if re.match('^policy', line):
-        policyField, policyID, policyValue = re.search('^policy(.*)_(\d+)=(.*)', line).groups()
-        if re.match('^policySrcZone', line):
-            ruleSrcZone = policyValue
-        elif re.match('^policyDstZone', line):
-            ruleDestZone = policyValue
-        elif re.match('^policySrcNet', line):
-            if policyValue:
-                ruleSrcNet = policyValue
-            else:
-                ruleSrcNet = "Any"
-        elif re.match('^policyDstNet', line):
-            if policyValue:
-                ruleDestNet = policyValue
-            else:
-                ruleDestNet = "Any"
-        elif re.match('^policyDstSvc', line):
-            if policyValue:
-                ruleDestService = policyValue
-            else:
-                ruleDestService = "Any"
-        elif re.match('^policyComment', line):
-            if not policyValue:
-                ruleComment = "No Comment!"
-            else:
-                ruleComment = policyValue
-        elif re.match('^policyAction', line):
-            if policyValue == "2":
-                ruleAction = "Allow"
-            elif policyValue == "1":
-                ruleAction = "Discard"
-            else:
-                ruleAction = "Deny"
-        elif re.match('^policyEnabled', line):
-            if policyValue == "1":
-                ruleStatus = "Enabled"
-            else:
-                ruleStatus = "Disabled"
-        if ruleSrcZone and ruleDestZone and ruleSrcNet and ruleDestNet and ruleDestService and ruleAction and ruleStatus and ruleComment:
-            # Sonicwall is goofy and has some enabled rules set to 0 when its an auto-added rule
-            if re.match('^Auto', ruleComment) and ruleStatus == "Disabled":
-                ruleStatus = "Enabled"
+        policies = re.search('^policy(.*)_(\d+)=(.*)', line)
+        if policies:
+            policyField, policyID, policyValue = policies.groups()
+            if re.match('^policySrcZone', line):
+                ruleSrcZone = policyValue
+            elif re.match('^policyDstZone', line):
+                ruleDestZone = policyValue
+            elif re.match('^policySrcNet', line):
+                if policyValue:
+                    ruleSrcNet = policyValue
+                else:
+                    ruleSrcNet = "Any"
+            elif re.match('^policyDstNet', line):
+                if policyValue:
+                    ruleDestNet = policyValue
+                else:
+                    ruleDestNet = "Any"
+            elif re.match('^policyDstSvc', line):
+                if policyValue:
+                    ruleDestService = policyValue
+                else:
+                    ruleDestService = "Any"
+            elif re.match('^policyComment', line):
+                if not policyValue:
+                    ruleComment = "No Comment!"
+                else:
+                    ruleComment = policyValue
+            elif re.match('^policyAction', line):
+                if policyValue == "2":
+                    ruleAction = "Allow"
+                elif policyValue == "1":
+                    ruleAction = "Discard"
+                else:
+                    ruleAction = "Deny"
+            elif re.match('^policyEnabled', line):
+                if policyValue == "1":
+                    ruleStatus = "Enabled"
+                else:
+                    ruleStatus = "Disabled"
+            if ruleSrcZone and ruleDestZone and ruleSrcNet and ruleDestNet and ruleDestService and ruleAction and ruleStatus and ruleComment:
+                # Sonicwall is goofy and has some enabled rules set to 0 when its an auto-added rule
+                if re.match('^Auto', ruleComment) and ruleStatus == "Disabled":
+                    ruleStatus = "Enabled"
 
-            rule={
-                "ruleID": policyID,
-                "ruleSrcZone": ruleSrcZone,
-                "ruleDestZone": ruleDestZone,
-                "ruleSrcNet": urllib.unquote(ruleSrcNet),
-                "ruleDestNet": urllib.unquote(ruleDestNet),
-                "ruleDestService": urllib.unquote(ruleDestService),
-                "ruleAction": ruleAction,
-                "ruleStatus": ruleStatus,
-                "ruleComment": urllib.unquote(ruleComment)
-            }
-            rules.append(rule)
-            ruleSrcZone=""
-            ruleDestZone=""
-            ruleSrcNet=""
-            ruleDestNet=""
-            ruleDestService=""
-            ruleAction=""
-            ruleComment=""
-            ruleStatus=""
+                rule={
+                    "ruleID": policyID,
+                    "ruleSrcZone": ruleSrcZone,
+                    "ruleDestZone": ruleDestZone,
+                    "ruleSrcNet": urllib.unquote(ruleSrcNet),
+                    "ruleDestNet": urllib.unquote(ruleDestNet),
+                    "ruleDestService": urllib.unquote(ruleDestService),
+                    "ruleAction": ruleAction,
+                    "ruleStatus": ruleStatus,
+                    "ruleComment": urllib.unquote(ruleComment)
+                }
+                rules.append(rule)
+                ruleSrcZone=""
+                ruleDestZone=""
+                ruleSrcNet=""
+                ruleDestNet=""
+                ruleDestService=""
+                ruleAction=""
+                ruleComment=""
+                ruleStatus=""
 
     if re.match('^addro_', line):
         if re.match('^addro_atomToGrp_', line):
@@ -344,140 +356,145 @@ for line in decoded_data:
             serviceEndPort=""
 
     if re.match('^natPolicy', line):
-        natField, natRuleID, natValue = re.search('^natPolicy(.*)_(\d+)=(.*)', line).groups()
-        if re.match('^natPolicyOrigSrc', line):
-            if natValue:
-                natOrigSrc = natValue
-            else:
-                natOrigSrc = "Any"
-        elif re.match('^natPolicyOrigDst', line):
-            if natValue:
-                natOrigDest = natValue
-            else:
-                natOrigDest = "Any"
-        elif re.match('^natPolicyOrigSvc', line):
-            if natValue:
-                natOrigService = natValue
-            else:
-                natOrigService = "Any"
-        elif re.match('^natPolicyTransSrc', line):
-            if natValue:
-                natTransSrc = natValue
-            else:
-                natTransSrc = "Any"
-        elif re.match('^natPolicyTransDst', line):
-            if natValue:
-                natTransDest = natValue
-            else:
-                natTransDest = "original"
-        elif re.match('^natPolicyTransSvc', line):
-            if natValue:
-                natTransService = natValue
-            else:
-                natTransService = "original"
-        elif re.match('^natPolicySrcIface', line):
-            if natValue and natValue != "-1":
-                natSrcInterface = interfaces[natValue].get('ifaceName', "Not Found")
-            else:
-                natSrcInterface = "Any"
-            if natValue == '-1':
-                natSrcZone == "Not Found"
-            else:
-                natSrcZone = interfaces[natValue].get('interfaceZone', "Not Found")
-        elif re.match('^natPolicyDstIface', line):
-            if natValue and natValue != "-1":
-                natDestInterface = interfaces[natValue].get('ifaceName', "Not Found")
-            else:
-                natDestInterface = "Any"
-            if natValue == '-1':
-                natDestZone == "Not Found"
-            else:
-                natDestZone = interfaces[natValue].get('interfaceZone', "Not Found")
-        elif re.match('^natPolicyReflexive', line):
-            if natValue == "1":
-                natReflexive = "Enabled"
-            elif natValue == "0":
-                natReflexive = "Disabled"
-        elif re.match('^natPolicyComment', line):
-            if not natValue:
-                natComment = "No Comment!"
-            else:
-                natComment = natValue
-        elif re.match('^natPolicyEnabled', line):
-            if natValue == "1":
-                natStatus = "Enabled"
-            else:
-                natStatus = "Disabled"
-        if natRuleID and natOrigSrc and natOrigDest and natOrigService and natTransSrc and natTransDest and natTransService and natSrcInterface and natDestInterface and natReflexive and natComment and natStatus:
-            # Sonicwall is goofy and has some enabled rules set to 0 when its an auto-added rule
-            if re.match('^Auto', natComment) and natStatus == "Disabled":
-                natstatus = "Enabled"
-            
-            if natSrcZone == '':
-                natSrcZone = "Not Found"
-            
-            if natDestZone == '':
-                natDestZone = "Not Found"
+        nat = re.search('^natPolicy(.*)_(\d+)=(.*)', line)
+        if nat:
+            natField, natRuleID, natValue = nat.groups()
+            if re.match('^natPolicyOrigSrc', line):
+                if natValue:
+                    natOrigSrc = natValue
+                else:
+                    natOrigSrc = "Any"
+            elif re.match('^natPolicyOrigDst', line):
+                if natValue:
+                    natOrigDest = natValue
+                else:
+                    natOrigDest = "Any"
+            elif re.match('^natPolicyOrigSvc', line):
+                if natValue:
+                    natOrigService = natValue
+                else:
+                    natOrigService = "Any"
+            elif re.match('^natPolicyTransSrc', line):
+                if natValue:
+                    natTransSrc = natValue
+                else:
+                    natTransSrc = "Any"
+            elif re.match('^natPolicyTransDst', line):
+                if natValue:
+                    natTransDest = natValue
+                else:
+                    natTransDest = "original"
+            elif re.match('^natPolicyTransSvc', line):
+                if natValue:
+                    natTransService = natValue
+                else:
+                    natTransService = "original"
+            elif re.match('^natPolicySrcIface', line):
+                if natValue and natValue != "-1":
+                    natSrcInterface = interfaces[natValue].get('ifaceName', "Not Found")
+                else:
+                    natSrcInterface = "Any"
+                if natValue == '-1':
+                    natSrcZone == "Not Found"
+                else:
+                    natSrcZone = interfaces[natValue].get('interfaceZone', "Not Found")
+            elif re.match('^natPolicyDstIface', line):
+                if natValue and natValue != "-1":
+                    natDestInterface = interfaces[natValue].get('ifaceName', "Not Found")
+                else:
+                    natDestInterface = "Any"
+                if natValue == '-1':
+                    natDestZone == "Not Found"
+                else:
+                    natDestZone = interfaces[natValue].get('interfaceZone', "Not Found")
+            elif re.match('^natPolicyReflexive', line):
+                if natValue == "1":
+                    natReflexive = "Enabled"
+                elif natValue == "0":
+                    natReflexive = "Disabled"
+            elif re.match('^natPolicyComment', line):
+                if not natValue:
+                    natComment = "No Comment!"
+                else:
+                    natComment = natValue
+            elif re.match('^natPolicyEnabled', line):
+                if natValue == "1":
+                    natStatus = "Enabled"
+                else:
+                    natStatus = "Disabled"
+            if natRuleID and natOrigSrc and natOrigDest and natOrigService and natTransSrc and natTransDest and natTransService and natSrcInterface and natDestInterface and natReflexive and natComment and natStatus:
+                # Sonicwall is goofy and has some enabled rules set to 0 when its an auto-added rule
+                if re.match('^Auto', natComment) and natStatus == "Disabled":
+                    natstatus = "Enabled"
+                
+                if natSrcZone == '':
+                    natSrcZone = "Not Found"
+                
+                if natDestZone == '':
+                    natDestZone = "Not Found"
 
-            natRule= {
-                "natRuleID": natRuleID,
-                "natOrigSrc": urllib.unquote(natOrigSrc),
-                "natOrigDest": urllib.unquote(natOrigDest),
-                "natOrigService": urllib.unquote(natOrigService),
-                "natTransSrc": urllib.unquote(natTransSrc),
-                "natTransDest": urllib.unquote(natTransDest),
-                "natTransService": urllib.unquote(natTransService),
-                "natSrcInterface": urllib.unquote(natSrcInterface),
-                "natDestInterface": urllib.unquote(natDestInterface),
-                "natSrcZone": urllib.unquote(natSrcZone),
-                "natDestZone": urllib.unquote(natDestZone),
-                "natReflexive": urllib.unquote(natReflexive),
-                "natComment": urllib.unquote(natComment),
-                "natStatus": natStatus,
-            }
-            natRules.append(natRule)
-            natRuleID = ""
-            natOrigSrc = ""
-            natOrigDest = ""
-            natOrigService = ""
-            natTransSrc = ""
-            natTransDest = ""
-            natTransService = ""
-            natSrcInterface = ""
-            natDestInterface = ""
-            natSrcZone = ""
-            natDestZone = ""
-            natReflexive = ""
-            natComment = ""
-            natStatus = ""
+                natRule= {
+                    "natRuleID": natRuleID,
+                    "natOrigSrc": urllib.unquote(natOrigSrc),
+                    "natOrigDest": urllib.unquote(natOrigDest),
+                    "natOrigService": urllib.unquote(natOrigService),
+                    "natTransSrc": urllib.unquote(natTransSrc),
+                    "natTransDest": urllib.unquote(natTransDest),
+                    "natTransService": urllib.unquote(natTransService),
+                    "natSrcInterface": urllib.unquote(natSrcInterface),
+                    "natDestInterface": urllib.unquote(natDestInterface),
+                    "natSrcZone": urllib.unquote(natSrcZone),
+                    "natDestZone": urllib.unquote(natDestZone),
+                    "natReflexive": urllib.unquote(natReflexive),
+                    "natComment": urllib.unquote(natComment),
+                    "natStatus": natStatus,
+                }
+                natRules.append(natRule)
+                natRuleID = ""
+                natOrigSrc = ""
+                natOrigDest = ""
+                natOrigService = ""
+                natTransSrc = ""
+                natTransDest = ""
+                natTransService = ""
+                natSrcInterface = ""
+                natDestInterface = ""
+                natSrcZone = ""
+                natDestZone = ""
+                natReflexive = ""
+                natComment = ""
+                natStatus = ""
 
-print ""
-print "=========================================================="
-print "================== Interface Objects ====================="
-print "=========================================================="
-print ""
-print "ifaceIfNum, ifaceName, ifaceType, interfaceZone, ifaceIp, ifaceMask, ifaceVlanTag, ifaceVlanParent, ifaceComment"
+
+print ("")
+print ("==========================================================")
+print ("================== Interface Objects =====================")
+print ("==========================================================")
+print ("")
+print ("ifaceIfNum, ifaceName, ifaceType, interfaceZone, ifaceIp, ifaceMask, ifaceVlanTag, ifaceVlanParent, ifaceComment")
 oInterfaces = collections.OrderedDict(sorted(interfaces.items()))
-for interface, interfaceFields in oInterfaces.iteritems():
-    print '%s,%s,%s,%s,%s,%s,%s,%s,%s' % (interfaceFields["ifaceIfNum"], interfaceFields["ifaceName"], interfaceFields["ifaceType"], interfaceFields["interfaceZone"], interfaceFields["ifaceIp"], interfaceFields["ifaceMask"], interfaceFields["ifaceVlanTag"], interfaceFields["ifaceVlanParent"], interfaceFields["ifaceComment"])
+for interface, interfaceFields in oInterfaces.items():
+    print ('%s,%s,%s,%s,%s,%s,%s,%s,%s' % (interfaceFields["ifaceIfNum"], interfaceFields["ifaceName"], interfaceFields["ifaceType"], interfaceFields["interfaceZone"], interfaceFields["ifaceIp"], interfaceFields["ifaceMask"], interfaceFields["ifaceVlanTag"], interfaceFields["ifaceVlanParent"], interfaceFields["ifaceComment"]))
 
-print "=========================================================="
-print "================== Firewall Rules ========================"
-print "=========================================================="
-print ""
-print "RuleID,Source Zone,Dest Zone,Source Net,Dest Net, Dest Service, Action, Status, Comment"
+print ("")
+print ("==========================================================")
+print ("================== Firewall Rules ========================")
+print ("==========================================================")
+print ("")
+print ("RuleID,Source Zone,Dest Zone,Source Net,Dest Net, Dest Service, Action, Status, Comment")
 for x in rules:
     if x["ruleSrcZone"] != prevSrcZone or x["ruleDestZone"] != prevDestZone:
-        print '\n\nSource Zone: %s, Dest Zone: %s' % (x["ruleSrcZone"], x["ruleDestZone"])
-    print '%s,%s,%s,%s,%s,%s,%s,%s,%s' % (x["ruleID"], x["ruleSrcZone"], x["ruleDestZone"], x["ruleSrcNet"], x["ruleDestNet"], x["ruleDestService"], x["ruleAction"], x["ruleStatus"], x["ruleComment"])
+        print ('\n\nSource Zone: %s, Dest Zone: %s' % (x["ruleSrcZone"], x["ruleDestZone"]))
+    print ('%s,%s,%s,%s,%s,%s,%s,%s,%s' % (x["ruleID"], x["ruleSrcZone"], x["ruleDestZone"], x["ruleSrcNet"], x["ruleDestNet"], x["ruleDestService"], x["ruleAction"], x["ruleStatus"], x["ruleComment"]))
     prevSrcZone=x["ruleSrcZone"]
     prevDestZone=x["ruleDestZone"]
 
-print "=========================================================="
-print "================== Nat Rules ========================"
-print "=========================================================="
-print ""
-print "natRuleID, natOrigSrc,  natTransSrc, natOrigService, natOrigDest, natTransDest, natTransService, natSrcInterface, natSrcZone, natDestInterface, natDestzone, natReflexive, natStatus, natComment"
+print ("")
+print ("==========================================================")
+print ("===================== Nat Rules ==========================")
+print ("==========================================================")
+print ("")
+print ("natRuleID, natOrigSrc,  natTransSrc, natOrigService, natOrigDest, natTransDest, natTransService, natSrcInterface, natSrcZone, natDestInterface, natDestzone, natReflexive, natStatus, natComment")
 for x in natRules:
     if x['natSrcZone'] == 'Not Found':
         if x['natOrigSrc'] in addrGroups:
@@ -521,58 +538,100 @@ for x in natRules:
         else:
             x['natDestZone'] = "Unknown"
 
-    print '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (x["natRuleID"], x["natOrigSrc"], x["natTransSrc"], x["natOrigService"], x["natOrigDest"], x["natTransDest"], x["natTransService"], x["natSrcInterface"], x["natSrcZone"], x["natDestInterface"], x["natDestZone"], x["natReflexive"], x["natStatus"], x["natComment"])
-    
-print ""
-print "=========================================================="
-print "================== IP Address Objects ===================="
-print "=========================================================="
-print ""
-print "Object Name,Zone,IP,Subnet"
+    print ('%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s' % (x["natRuleID"], x["natOrigSrc"], x["natTransSrc"], x["natOrigService"], x["natOrigDest"], x["natTransDest"], x["natTransService"], x["natSrcInterface"], x["natSrcZone"], x["natDestInterface"], x["natDestZone"], x["natReflexive"], x["natStatus"], x["natComment"]))
+
+print ("")
+print ("==========================================================")
+print ("================== IP Address Objects ====================")
+print ("==========================================================")
+print ("")
+print ("Object Name,Zone,IP,Subnet")
 oAddrObjects = collections.OrderedDict(sorted(addrObjects.items()))
-for addr, addrFields in oAddrObjects.iteritems():
-    print '%s,%s,%s,%s' % (addr, addrFields["addrZone"], addrFields["addrIP"], addrFields["addrSubnet"])
+for addr, addrFields in oAddrObjects.items():
+    print ('%s,%s,%s,%s' % (addr, addrFields["addrZone"], addrFields["addrIP"], addrFields["addrSubnet"]))
 
-print ""
-print "=========================================================="
-print "================== FQDN Address Objects ======================="
-print "=========================================================="
-print ""
-print "Object Name,Zone,FQDN"
+print ("")
+print ("==========================================================")
+print ("================== FQDN Address Objects ==================")
+print ("==========================================================")
+print ("")
+print ("Object Name,Zone,FQDN")
 oAddrFqdnObjects = collections.OrderedDict(sorted(addrFqdnObjects.items()))
-for addr, addrFields in oAddrFqdnObjects.iteritems():
-    print '%s,%s,%s' % (addr, addrFields["addrZone"], addrFields["addrFqdn"])
+for addr, addrFields in oAddrFqdnObjects.items():
+    print ('%s,%s,%s' % (addr, addrFields["addrZone"], addrFields["addrFqdn"]))
 
-print ""
-print "=========================================================="
-print "================== Address Groups ========================"
-print "=========================================================="
-print ""
-for group,groupObjects in addrGroups.iteritems():
-    print group
+print ("")
+print ("==========================================================")
+print ("================== Address Groups ========================")
+print ("==========================================================")
+print ("")
+for group,groupObjects in addrGroups.items():
+    print (group)
     for groupObj in groupObjects:
-        print "\t%s" % groupObj
-    print ""
+        print ("\t%s" % groupObj)
+    print ("")
 
-print ""
-print "=========================================================="
-print "================== Service Objects ======================="
-print "=========================================================="
-print ""
-print "Service Name, Start Port, EndPort, Protocol, ObjectType"
+print ("")
+print ("==========================================================")
+print ("================== Service Objects =======================")
+print ("==========================================================")
+print ("")
+print ("Service Name, Start Port, EndPort, Protocol, ObjectType")
 oServiceObjects = collections.OrderedDict(sorted(serviceObjects.items()))
-for service,serviceFields in oServiceObjects.iteritems():
-    print '%s,%s-%s,%s,%s' % (service, serviceFields["serviceStartPort"], serviceFields["serviceEndPort"], serviceFields["serviceProtocol"], serviceFields["serviceType"])
+for service,serviceFields in oServiceObjects.items():
+    print ('%s,%s-%s,%s,%s' % (service, serviceFields["serviceStartPort"], serviceFields["serviceEndPort"], serviceFields["serviceProtocol"], serviceFields["serviceType"]))
 
-print ""
-print "=========================================================="
-print "================== Service Groups ========================"
-print "=========================================================="
-print ""
-for serviceGroup,serviceGroupObjects in serviceGroups.iteritems():
-    print serviceGroup
+print ("")
+print ("==========================================================")
+print ("================== Service Groups ========================")
+print ("==========================================================")
+print ("")
+for serviceGroup,serviceGroupObjects in serviceGroups.items():
+    print (serviceGroup)
     for serviceObj in serviceGroupObjects:
         #print serviceObj
-        print "\t%s" % serviceObj
-    print ""
+        print ("\t%s" % serviceObj)
+    print ("")
 
+
+with open(output_file_name + '_interfaces.csv', 'w') as output:
+    output.write("ifaceIfNum, ifaceName, ifaceType, interfaceZone, ifaceIp, ifaceMask, ifaceVlanTag, ifaceVlanParent, ifaceComment\n")
+    for interface, interfaceFields in oInterfaces.items():
+        output.write('%s,%s,%s,%s,%s,%s,%s,%s,%s\n' % (interfaceFields["ifaceIfNum"], interfaceFields["ifaceName"], interfaceFields["ifaceType"], interfaceFields["interfaceZone"], interfaceFields["ifaceIp"], interfaceFields["ifaceMask"], interfaceFields["ifaceVlanTag"], interfaceFields["ifaceVlanParent"], interfaceFields["ifaceComment"]))
+
+with open(output_file_name + '_rules.csv', 'w') as output:
+    output.write("RuleID,Source Zone,Dest Zone,Source Net,Dest Net, Dest Service, Action, Status, Comment\n")
+    for x in rules:
+        output.write('%s,%s,%s,%s,%s,%s,%s,%s,%s\n' % (x["ruleID"], x["ruleSrcZone"], x["ruleDestZone"], x["ruleSrcNet"], x["ruleDestNet"], x["ruleDestService"], x["ruleAction"], x["ruleStatus"], x["ruleComment"]))
+
+with open(output_file_name + '_nat.csv', 'w') as output:
+    output.write("natRuleID, natOrigSrc,  natTransSrc, natOrigService, natOrigDest, natTransDest, natTransService, natSrcInterface, natSrcZone, natDestInterface, natDestzone, natReflexive, natStatus, natComment\n")
+    for x in natRules:
+        output.write('%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' % (x["natRuleID"], x["natOrigSrc"], x["natTransSrc"], x["natOrigService"], x["natOrigDest"], x["natTransDest"], x["natTransService"], x["natSrcInterface"], x["natSrcZone"], x["natDestInterface"], x["natDestZone"], x["natReflexive"], x["natStatus"], x["natComment"]))
+
+with open(output_file_name + '_ip.csv', 'w') as output:
+    output.write("Object Name,Zone,IP,Subnet\n")
+    for addr, addrFields in oAddrObjects.items():
+        output.write('%s,%s,%s,%s \n' % (addr, addrFields["addrZone"], addrFields["addrIP"], addrFields["addrSubnet"]))
+
+with open(output_file_name + '_fqdn.csv', 'w') as output:
+    output.write("Object Name,Zone,FQDN\n")
+    for addr, addrFields in oAddrFqdnObjects.items():
+        output.write('%s,%s,%s\n' % (addr, addrFields["addrZone"], addrFields["addrFqdn"]))
+
+with open(output_file_name + '_adresses_groups.csv', 'w') as output:
+    output.write("Group,Member\n")
+    for group,groupObjects in addrGroups.items():
+        for groupObj in groupObjects:
+            output.write('%s,%s\n' % (group, groupObj))
+
+with open(output_file_name + '_services.csv', 'w') as output:
+    output.write("Service Name, Start Port, EndPort, Protocol, ObjectType\n")
+    for service,serviceFields in oServiceObjects.items():
+        output.write('%s,%s-%s,%s,%s\n' % (service, serviceFields["serviceStartPort"], serviceFields["serviceEndPort"], serviceFields["serviceProtocol"], serviceFields["serviceType"]))
+
+with open(output_file_name + '_services_groups.csv', 'w') as output:
+    output.write("Group,Member\n")
+    for serviceGroup,serviceGroupObjects in serviceGroups.items():
+        for serviceObj in serviceGroupObjects:
+            output.write('%s,%s\n' % (serviceGroup, serviceObj))
